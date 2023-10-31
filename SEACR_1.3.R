@@ -60,35 +60,50 @@ if(is.na(numtest)){ ## If 2nd field is a bedgraph, calculate empirical threshold
 	invis <- gc(verbose=FALSE)
 	if(argsL$norm=="yes"){  ## Calculate peaks of density plots to generate normalization factor
 		dist2d<-function(a,b,c){v1<- b - c; v2<- a - b; m<-cbind(v1,v2); d<-det(m)/sqrt(sum(v1*v1))}
-		expframe<-data.frame(count=seq(1,0,length=length(expvec)), quant=sort(expvec,decreasing=TRUE)/max(expvec), value=sort(expvec,decreasing=TRUE))
+
+		expframe<-data.frame(
+			count=seq(1,0,length=length(expvec)),
+			quant=sort(expvec,decreasing=TRUE)/max(expvec),
+			value=sort(expvec,decreasing=TRUE)
+			)
 		expframe$diff<-abs(expframe$count-expframe$quant)
 		expframe<-expframe[expframe$diff > 0.9*max(expframe$diff),]
 		expframe$dist<-apply(expframe,1,function(x) dist2d(c(x[1],x[2]),0,1))
-		ctrlframe<-data.frame(count=seq(1,0,length=length(ctrlvec)), quant=sort(ctrlvec,decreasing=TRUE)/max(ctrlvec), value=sort(ctrlvec,decreasing=TRUE))
+
+		ctrlframe<-data.frame(
+			count=seq(1,0,length=length(ctrlvec)),
+			quant=sort(ctrlvec,decreasing=TRUE)/max(ctrlvec),
+			value=sort(ctrlvec,decreasing=TRUE)
+		)
 		ctrlframe$diff<-abs(ctrlframe$count-ctrlframe$quant)
 		ctrlframe<-ctrlframe[ctrlframe$diff > 0.9*max(ctrlframe$diff),]
 		ctrlframe$dist<-apply(ctrlframe,1,function(x) dist2d(c(x[1],x[2]),0,1))
+
 		if(ctrlframe$value[ctrlframe$dist==max(ctrlframe$dist)][1] > sort(ctrlvec)[as.integer(0.9*length(ctrlvec))]){
-		  ctrlvalue<-ctrlframe$value[ctrlframe$dist==max(ctrlframe$dist)][1]
+			ctrlvalue<-ctrlframe$value[ctrlframe$dist==max(ctrlframe$dist)][1]
 		}else{
-		  ctrlvalue<-sort(ctrlvec)[as.integer(0.9*length(ctrlvec))] ## Added 7/15/19 to improve memory performance
+			ctrlvalue<-sort(ctrlvec)[as.integer(0.9*length(ctrlvec))] ## Added 7/15/19 to improve memory performance
 		}
 		if(expframe$value[expframe$dist==max(expframe$dist)][1] > sort(expvec)[as.integer(0.9*length(expvec))]){
-		  expvalue<-expframe$value[expframe$dist==max(expframe$dist)][1]
+			expvalue<-expframe$value[expframe$dist==max(expframe$dist)][1]
 		}else{
-		  expvalue<-sort(expvec)[as.integer(0.9*length(expvec))] ## Added 7/15/19 to improve memory performance
+			expvalue<-sort(expvec)[as.integer(0.9*length(expvec))] ## Added 7/15/19 to improve memory performance
 		}
+
 		ctrltest<-density(ctrlvec[ctrlvec <= ctrlvalue]) ## New for SEACR_1.1
 		exptest<-density(expvec[expvec <= expvalue]) ## New for SEACR_1.1
 		constant<-(exptest$x[exptest$y==max(exptest$y)])/(ctrltest$x[ctrltest$y==max(ctrltest$y)])
 		ctrlvec<-ctrlvec*constant
 	} ## Calculate total signal and max signal thresholds
+
 	both<-c(expvec,ctrlvec)
 	pctremain<-function(x) (length(expvec)-(ecdf(expvec)(x)*length(expvec)))/(length(both)-(ecdf(both)(x)*length(both)))
+
 	x<-sort(unique(both)) ## New for SEACR_1.1
 	x0<-x[which(na.omit(pctremain(x[pctremain(x) < 1])) == max(na.omit(pctremain(x[pctremain(x) < 1]))))]  ## New for SEACR_1.1
 	z<-x[x <= x0[1]]	## New for SEACR_1.1
 	z2<-z[abs(((pctremain(x0)+min(pctremain(z)))/2)-pctremain(z))==min(abs(((pctremain(x0)+min(pctremain(z)))/2)-pctremain(z)))] ## New for SEACR_1.1
+
 	if(x0[1]!=z2[1]){  ## Added 7/15/19 to avoid omitting z when x0==z2
 		z<-z[z > z2[1]] ## New for SEACR_1.1
 		z0<-z[abs(z-(max(z)-((1/2)*(max(z)-min(z)))))==min(abs(z-(max(z)-((1/2)*(max(z)-min(z))))))] ## New for SEACR_1.1
@@ -98,8 +113,13 @@ if(is.na(numtest)){ ## If 2nd field is a bedgraph, calculate empirical threshold
 	
 	## The following code segment was added to avoid spurious high thresholding when the peak of a lower threshold is within 95% of the peak of the maximum threshold
 	
-	frame<-data.frame(thresh=x[1:(length(x)-1)], pct=pctremain(x[1:(length(x)-1)]), diff=abs(diff(pctremain(x))))
+	frame<-data.frame(
+			thresh=x[1:(length(x)-1)],
+			pct=pctremain(x[1:(length(x)-1)]),
+			diff=abs(diff(pctremain(x)))
+			)
 	frame<-na.omit(frame)
+
 	i<-2
 	output<-0
 	while(output==0){
@@ -112,16 +132,19 @@ if(is.na(numtest)){ ## If 2nd field is a bedgraph, calculate empirical threshold
 	a0<-a[which(na.omit(pctremain(a[pctremain(a) < 1])) == max(na.omit(pctremain(a[pctremain(a) <  1]))))]
 	b<-a[a <= a0[1]]
 	b2<-b[abs(((pctremain(a0)+min(pctremain(b)))/2)-pctremain(b))==min(abs(((pctremain(a0)+min(pctremain(b)))/2)-pctremain(b)))]
+
 	if(a0[1]!=b2[1]){  ## Added 7/15/19 to avoid omitting b when a0==b2
 		b<-b[b > b2[1]]
 		b0<-b[abs(b-(max(b)-((1/2)*(max(b)-min(b)))))==min(abs(b-(max(b)-((1/2)*(max(b)-min(b))))))]
 	}else{  ## Added 7/15/19 to avoid omitting b when a0==b2
 		b0<-a0  ## Added 7/15/19 to avoid omitting b when a0==b2
 	}  ## Added 7/15/19 to avoid omitting b when a0==b2
+
 	if(max(na.omit(pctremain(a[pctremain(a) < 1])))/max(na.omit(pctremain(x[pctremain(x) < 1]))) > 0.95){
 		x0<-a0
 		z0<-b0
 	}
+	
 	both2<-c(expmax,ctrlmax)
 	d<-sort(unique(both2))
 	pctremain2<-function(x) 1-(ecdf(expmax)(x)-ecdf(ctrlmax)(x))
