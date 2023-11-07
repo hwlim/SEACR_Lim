@@ -2,6 +2,7 @@
 20231107:
 - separate awk/gawk script into separate files
 - environment variable for SEACR path
+- bedGraph needs to be compressed with gzip
 
 
 ## Setup
