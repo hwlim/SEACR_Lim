@@ -2,6 +2,12 @@
 20231107:
 - separate awk/gawk script into separate files
 - environment variable for SEACR path
+
+
+## Setup
+- git clone to a proper location
+- declare an environment variable "SEACR_PATH" in .bashrc
+- add the installation path to PATH in .bashrc
   
 =====================
 
