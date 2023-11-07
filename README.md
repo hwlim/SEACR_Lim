@@ -1,3 +1,10 @@
+## Modification by Hee Woong Lim
+20231107:
+- separate awk/gawk script into separate files
+- environment variable for SEACR path
+  
+=====================
+
 # SEACR
 ## SEACR: *S*parse *E*nrichment *A*nalysis for *C*UT&*R*UN
 
