@@ -62,6 +62,9 @@ then
 	exit 1
 fi
 
+sampleTmp=${TMPDIR}/__temp__.$$.1
+ctrlTmp=${TMPDIR}/__temp__.$$.2
+
 exp=`basename $1`
 
 if [[ $2 =~ ^[0-9]?+([.][0-9]+)?$ ]] || [[ $2 =~ ^[0-9]([.][0-9]+) ]] || [[ $2 =~ ^([.][0-9]+) ]]
@@ -106,8 +109,8 @@ echo "Creating experimental AUC file: $(date)"
 
 zcat $1 \
 	| awk -f ${SEACR_PATH}/calcAuc.awk \
-	> ${TMPDIR}/__temp__.$$.1.auc.bed
-cut -f 4,7 ${TMPDIR}/__temp__.$$.1.auc.bed > ${TMPDIR}/__temp__.$$.1.auc
+	> ${sampleTmp}.auc.bed
+cut -f 4,7 ${sampleTmp}.auc.bed > ${sampleTmp}.auc
 
 if [[ -f $2 ]]
 then
@@ -115,8 +118,8 @@ then
 
 	zcat $2 \
 		| awk -f ${SEACR_PATH}/calcAuc.awk \
-		> ${TMPDIR}/__temp__.$$.2.auc.bed
-	cut -f 4,7 ${TMPDIR}/__temp__.$$.2.auc.bed > ${TMPDIR}/__temp__.$$.2.auc
+		> ${ctrlTmp}.auc.bed
+	cut -f 4,7 ${ctrlTmp}.auc.bed > ${ctrlTmp}.auc
 fi
 
 # module load R  ## For use on cluster
@@ -127,83 +130,83 @@ path=`dirname $0`
 if [[ -f $2 ]] && [[ $norm == "norm" ]]
 then
 	echo "Calculating threshold using normalized control: $(date)"
-	Rscript $path/SEACR_1.3.R --exp=${TMPDIR}/__temp__.$$.1.auc --ctrl=${TMPDIR}/__temp__.$$.2.auc --norm=yes --output=${TMPDIR}/__temp__.$$.1
+	Rscript $path/SEACR_1.3.R --exp=${sampleTmp}.auc --ctrl=${ctrlTmp}.auc --norm=yes --output=${sampleTmp}
 elif [[ -f $2 ]]
 then
 	echo "Calculating threshold using non-normalized control: $(date)"
-	Rscript $path/SEACR_1.3.R --exp=${TMPDIR}/__temp__.$$.1.auc --ctrl=${TMPDIR}/__temp__.$$.2.auc --norm=no --output=${TMPDIR}/__temp__.$$.1
+	Rscript $path/SEACR_1.3.R --exp=${sampleTmp}.auc --ctrl=${ctrlTmp}.auc --norm=no --output=${sampleTmp}
 else
 	echo "Using user-provided threshold: $(date)"
-	Rscript $path/SEACR_1.3.R --exp=${TMPDIR}/__temp__.$$.1.auc --ctrl=$2 --norm=no --output=${TMPDIR}/__temp__.$$.1
+	Rscript $path/SEACR_1.3.R --exp=${sampleTmp}.auc --ctrl=$2 --norm=no --output=${sampleTmp}
 fi
 	
-fdr=`cat ${TMPDIR}/__temp__.$$.1.fdr.txt | sed -n '1p'`			## Added 5/15/19 for SEACR_1.1
-fdr2=`cat ${TMPDIR}/__temp__.$$.1.fdr.txt | sed -n '2p'`			## Added 5/15/19 for SEACR_1.1
+fdr=`cat ${sampleTmp}.fdr.txt | sed -n '1p'`			## Added 5/15/19 for SEACR_1.1
+fdr2=`cat ${sampleTmp}.fdr.txt | sed -n '2p'`			## Added 5/15/19 for SEACR_1.1
 
 #thresh=`cat $exp.threshold.txt`
-thresh=`cat ${TMPDIR}/__temp__.$$.1.threshold.txt | sed -n '1p'`
-thresh2=`cat ${TMPDIR}/__temp__.$$.1.threshold.txt | sed -n '2p'`
-thresh3=`cat ${TMPDIR}/__temp__.$$.1.threshold.txt | sed -n '3p'`
+thresh=`cat ${sampleTmp}.threshold.txt | sed -n '1p'`
+thresh2=`cat ${sampleTmp}.threshold.txt | sed -n '2p'`
+thresh3=`cat ${sampleTmp}.threshold.txt | sed -n '3p'`
 
 echo "Creating thresholded feature file: $(date)"
 
 if [[ $height == "relaxed" ]]
 then
   echo "Empirical false discovery rate = $fdr2"
-  awk -v value=$thresh2 -v value2=$thresh3 '$4 > value && $7 > value2 {print $0}' ${TMPDIR}/__temp__.$$.1.auc.bed | cut -f 1,2,3,4,5,6 > ${TMPDIR}/__temp__.$$.1.auc.threshold.bed
+  awk -v value=$thresh2 -v value2=$thresh3 '$4 > value && $7 > value2 {print $0}' ${sampleTmp}.auc.bed | cut -f 1,2,3,4,5,6 > ${sampleTmp}.auc.threshold.bed
 else
   echo "Empirical false discovery rate = $fdr"
-  awk -v value=$thresh -v value2=$thresh3 '$4 > value && $7 > value2 {print $0}' ${TMPDIR}/__temp__.$$.1.auc.bed | cut -f 1,2,3,4,5,6 > ${TMPDIR}/__temp__.$$.1.auc.threshold.bed
+  awk -v value=$thresh -v value2=$thresh3 '$4 > value && $7 > value2 {print $0}' ${sampleTmp}.auc.bed | cut -f 1,2,3,4,5,6 > ${sampleTmp}.auc.threshold.bed
 fi
 
 if [[ -f $2 ]]
 then
 	if [[ $norm == "norm" ]] #If normalizing, multiply control bedgraph by normalization constant
 	then
-		constant=`cat ${TMPDIR}/__temp__.$$.1.norm.txt | sed -n '1p'`
-		awk -v mult=$constant 'BEGIN{OFS="\t"}; {$4=$4*mult; print $0}' ${TMPDIR}/__temp__.$$.2.auc.bed | cut -f 1,2,3,4,5,6 > ${TMPDIR}/__temp__.$$.2.auc2.bed
-		mv ${TMPDIR}/__temp__.$$.2.auc2.bed ${TMPDIR}/__temp__.$$.2.auc.bed
+		constant=`cat ${sampleTmp}.norm.txt | sed -n '1p'`
+		awk -v mult=$constant 'BEGIN{OFS="\t"}; {$4=$4*mult; print $0}' ${ctrlTmp}.auc.bed | cut -f 1,2,3,4,5,6 > ${ctrlTmp}.auc2.bed
+		mv ${ctrlTmp}.auc2.bed ${ctrlTmp}.auc.bed
 	fi
-	awk -v value=$thresh '$4 > value {print $0}' ${TMPDIR}/__temp__.$$.2.auc.bed > ${TMPDIR}/__temp__.$$.2.auc.threshold.bed
+	awk -v value=$thresh '$4 > value {print $0}' ${ctrlTmp}.auc.bed > ${ctrlTmp}.auc.threshold.bed
 fi
 
 echo "Merging nearby features and eliminating control-enriched features: $(date)"
 
 # module load bedtools ## For use on cluster
-mean=`awk '{s+=$3-$2; t++}END{print s/(t*10)}' ${TMPDIR}/__temp__.$$.1.auc.threshold.bed`
+mean=`awk '{s+=$3-$2; t++}END{print s/(t*10)}' ${sampleTmp}.auc.threshold.bed`
 
 if [[ -f $2 ]]
 then
-	awk -v value=$mean -f ${SEACR_PATH}/mergeBlock.awk ${TMPDIR}/__temp__.$$.1.auc.threshold.bed \
-		| bedtools intersect -wa -v -a - -b ${TMPDIR}/__temp__.$$.2.auc.threshold.bed \
-		> ${TMPDIR}/__temp__.$$.1.auc.threshold.merge.bed  
+	awk -v value=$mean -f ${SEACR_PATH}/mergeBlock.awk ${sampleTmp}.auc.threshold.bed \
+		| bedtools intersect -wa -v -a - -b ${ctrlTmp}.auc.threshold.bed \
+		> ${sampleTmp}.auc.threshold.merge.bed  
 else
-	awk -v value=$mean -f ${SEACR_PATH}/mergeBlock.awk ${TMPDIR}/__temp__.$$.1.auc.threshold.bed \
-		> ${TMPDIR}/__temp__.$$.1.auc.threshold.merge.bed
+	awk -v value=$mean -f ${SEACR_PATH}/mergeBlock.awk ${sampleTmp}.auc.threshold.bed \
+		> ${sampleTmp}.auc.threshold.merge.bed
 fi
 
 if [[ $height == "relaxed" ]]
 then
-  mv ${TMPDIR}/__temp__.$$.1.auc.threshold.merge.bed $5.relaxed.bed
+  mv ${sampleTmp}.auc.threshold.merge.bed $5.relaxed.bed
 else
-  mv ${TMPDIR}/__temp__.$$.1.auc.threshold.merge.bed $5.stringent.bed
+  mv ${sampleTmp}.auc.threshold.merge.bed $5.stringent.bed
 fi
 
 echo "Removing temporary files: $(date)"
 
-rm ${TMPDIR}/__temp__.$$.1.auc.bed
-rm ${TMPDIR}/__temp__.$$.1.auc
-rm ${TMPDIR}/__temp__.$$.1.threshold.txt
-rm ${TMPDIR}/__temp__.$$.1.auc.threshold.bed
-rm ${TMPDIR}/__temp__.$$.1.fdr.txt  ## Added 5/15/19 for SEACR_1.1
+rm ${sampleTmp}.auc.bed
+rm ${sampleTmp}.auc
+rm ${sampleTmp}.threshold.txt
+rm ${sampleTmp}.auc.threshold.bed
+rm ${sampleTmp}.fdr.txt  ## Added 5/15/19 for SEACR_1.1
 if [[ -f $2 ]]
 then
-	rm ${TMPDIR}/__temp__.$$.2.auc.bed
-	rm ${TMPDIR}/__temp__.$$.2.auc
-	rm ${TMPDIR}/__temp__.$$.2.auc.threshold.bed
+	rm ${ctrlTmp}.auc.bed
+	rm ${ctrlTmp}.auc
+	rm ${ctrlTmp}.auc.threshold.bed
 fi
 if [[ $norm == "norm" ]]
 then
-	rm -f ${TMPDIR}/__temp__.$$.1.norm.txt
+	rm -f ${sampleTmp}.norm.txt
 fi
 echo "Done: $(date)"
