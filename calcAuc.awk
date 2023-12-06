@@ -5,8 +5,7 @@
 # Output
 #   chr / start / end/ auc / max / coord / num
 BEGIN{s=1}
-$1 ~ /^chr/
-{
+$1 ~ /^chr/ {
     if(s==1){
         if($4 > 0){
             chr=$1;

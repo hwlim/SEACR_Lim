@@ -62,8 +62,8 @@ then
 	exit 1
 fi
 
-password=`head /dev/urandom | LC_CTYPE=C tr -dc A-Za-z0-9 | head -c 13; echo ''`
-password2=`head /dev/urandom | LC_CTYPE=C tr -dc A-Za-z0-9 | head -c 13; echo ''`
+sampleTmp=${TMPDIR}/__temp__.$$.1
+ctrlTmp=${TMPDIR}/__temp__.$$.2
 
 exp=`basename $1`
 
@@ -109,16 +109,17 @@ echo "Creating experimental AUC file: $(date)"
 
 zcat $1 \
 	| awk -f ${SEACR_PATH}/calcAuc.awk \
-	> $password.auc.bed
-cut -f 4,7 $password.auc.bed > $password.auc
+	> ${sampleTmp}.auc.bed
+cut -f 4,7 ${sampleTmp}.auc.bed > ${sampleTmp}.auc
 
 if [[ -f $2 ]]
 then
 	echo "Creating control AUC file: $(date)"
+
 	zcat $2 \
 		| awk -f ${SEACR_PATH}/calcAuc.awk \
-		> $password2.auc.bed
-	cut -f 4,7 $password2.auc.bed > $password2.auc
+		> ${ctrlTmp}.auc.bed
+	cut -f 4,7 ${ctrlTmp}.auc.bed > ${ctrlTmp}.auc
 fi
 
 # module load R  ## For use on cluster
@@ -129,84 +130,83 @@ path=`dirname $0`
 if [[ -f $2 ]] && [[ $norm == "norm" ]]
 then
 	echo "Calculating threshold using normalized control: $(date)"
-	Rscript $path/SEACR_1.3.R --exp=$password.auc --ctrl=$password2.auc --norm=yes --output=$password
+	Rscript $path/SEACR_1.3.R --exp=${sampleTmp}.auc --ctrl=${ctrlTmp}.auc --norm=yes --output=${sampleTmp}
 elif [[ -f $2 ]]
 then
 	echo "Calculating threshold using non-normalized control: $(date)"
-	Rscript $path/SEACR_1.3.R --exp=$password.auc --ctrl=$password2.auc --norm=no --output=$password
+	Rscript $path/SEACR_1.3.R --exp=${sampleTmp}.auc --ctrl=${ctrlTmp}.auc --norm=no --output=${sampleTmp}
 else
 	echo "Using user-provided threshold: $(date)"
-	Rscript $path/SEACR_1.3.R --exp=$password.auc --ctrl=$2 --norm=no --output=$password
+	Rscript $path/SEACR_1.3.R --exp=${sampleTmp}.auc --ctrl=$2 --norm=no --output=${sampleTmp}
 fi
 	
-fdr=`cat $password.fdr.txt | sed -n '1p'`			## Added 5/15/19 for SEACR_1.1
-fdr2=`cat $password.fdr.txt | sed -n '2p'`			## Added 5/15/19 for SEACR_1.1
+fdr=`cat ${sampleTmp}.fdr.txt | sed -n '1p'`			## Added 5/15/19 for SEACR_1.1
+fdr2=`cat ${sampleTmp}.fdr.txt | sed -n '2p'`			## Added 5/15/19 for SEACR_1.1
 
 #thresh=`cat $exp.threshold.txt`
-thresh=`cat $password.threshold.txt | sed -n '1p'`
-thresh2=`cat $password.threshold.txt | sed -n '2p'`
-thresh3=`cat $password.threshold.txt | sed -n '3p'`
+thresh=`cat ${sampleTmp}.threshold.txt | sed -n '1p'`
+thresh2=`cat ${sampleTmp}.threshold.txt | sed -n '2p'`
+thresh3=`cat ${sampleTmp}.threshold.txt | sed -n '3p'`
 
 echo "Creating thresholded feature file: $(date)"
 
 if [[ $height == "relaxed" ]]
 then
   echo "Empirical false discovery rate = $fdr2"
-  awk -v value=$thresh2 -v value2=$thresh3 '$4 > value && $7 > value2 {print $0}' $password.auc.bed | cut -f 1,2,3,4,5,6 > $password.auc.threshold.bed
+  awk -v value=$thresh2 -v value2=$thresh3 '$4 > value && $7 > value2 {print $0}' ${sampleTmp}.auc.bed | cut -f 1,2,3,4,5,6 > ${sampleTmp}.auc.threshold.bed
 else
   echo "Empirical false discovery rate = $fdr"
-  awk -v value=$thresh -v value2=$thresh3 '$4 > value && $7 > value2 {print $0}' $password.auc.bed | cut -f 1,2,3,4,5,6 > $password.auc.threshold.bed
+  awk -v value=$thresh -v value2=$thresh3 '$4 > value && $7 > value2 {print $0}' ${sampleTmp}.auc.bed | cut -f 1,2,3,4,5,6 > ${sampleTmp}.auc.threshold.bed
 fi
 
 if [[ -f $2 ]]
 then
 	if [[ $norm == "norm" ]] #If normalizing, multiply control bedgraph by normalization constant
 	then
-		constant=`cat $password.norm.txt | sed -n '1p'`
-		awk -v mult=$constant 'BEGIN{OFS="\t"}; {$4=$4*mult; print $0}' $password2.auc.bed | cut -f 1,2,3,4,5,6 > $password2.auc2.bed
-		mv $password2.auc2.bed $password2.auc.bed
+		constant=`cat ${sampleTmp}.norm.txt | sed -n '1p'`
+		awk -v mult=$constant 'BEGIN{OFS="\t"}; {$4=$4*mult; print $0}' ${ctrlTmp}.auc.bed | cut -f 1,2,3,4,5,6 > ${ctrlTmp}.auc2.bed
+		mv ${ctrlTmp}.auc2.bed ${ctrlTmp}.auc.bed
 	fi
-	awk -v value=$thresh '$4 > value {print $0}' $password2.auc.bed > $password2.auc.threshold.bed
+	awk -v value=$thresh '$4 > value {print $0}' ${ctrlTmp}.auc.bed > ${ctrlTmp}.auc.threshold.bed
 fi
 
 echo "Merging nearby features and eliminating control-enriched features: $(date)"
 
 # module load bedtools ## For use on cluster
-mean=`awk '{s+=$3-$2; t++}END{print s/(t*10)}' $password.auc.threshold.bed`
+mean=`awk '{s+=$3-$2; t++}END{print s/(t*10)}' ${sampleTmp}.auc.threshold.bed`
 
 if [[ -f $2 ]]
 then
-	awk -v value=$mean -f ${SEACR}/mergeBlock.awk $password.auc.threshold.bed \
-		| bedtools intersect -wa -v -a - -b $password2.auc.threshold.bed \
-		> $5.auc.threshold.merge.bed  
+	awk -v value=$mean -f ${SEACR_PATH}/mergeBlock.awk ${sampleTmp}.auc.threshold.bed \
+		| bedtools intersect -wa -v -a - -b ${ctrlTmp}.auc.threshold.bed \
+		> ${sampleTmp}.auc.threshold.merge.bed  
 else
-	awk -v value=$mean -f ${SEACR}/mergeBlock.awk $password.auc.threshold.bed \
-		> $5.auc.threshold.merge.bed
+	awk -v value=$mean -f ${SEACR_PATH}/mergeBlock.awk ${sampleTmp}.auc.threshold.bed \
+		> ${sampleTmp}.auc.threshold.merge.bed
 fi
 
 if [[ $height == "relaxed" ]]
 then
-  cat $5.auc.threshold.merge.bed > $5.relaxed.bed
+  mv ${sampleTmp}.auc.threshold.merge.bed $5.relaxed.bed
 else
-  cat $5.auc.threshold.merge.bed > $5.stringent.bed
+  mv ${sampleTmp}.auc.threshold.merge.bed $5.stringent.bed
 fi
 
 echo "Removing temporary files: $(date)"
 
-rm $password.auc.bed
-rm $password.auc
-rm $password.threshold.txt
-rm $password.auc.threshold.bed
-rm $password.fdr.txt  ## Added 5/15/19 for SEACR_1.1
-rm $5.auc.threshold.merge.bed
+rm ${sampleTmp}.auc.bed
+rm ${sampleTmp}.auc
+rm ${sampleTmp}.threshold.txt
+rm ${sampleTmp}.auc.threshold.bed
+rm ${sampleTmp}.fdr.txt  ## Added 5/15/19 for SEACR_1.1
 if [[ -f $2 ]]
 then
-	rm $password2.auc.bed
-	rm $password2.auc
-	rm $password2.auc.threshold.bed
+	rm ${ctrlTmp}.auc.bed
+	rm ${ctrlTmp}.auc
+	rm ${ctrlTmp}.auc.threshold.bed
 fi
 if [[ $norm == "norm" ]]
 then
-	rm -f $password.norm.txt
+	rm -f ${sampleTmp}.norm.txt
 fi
 echo "Done: $(date)"
